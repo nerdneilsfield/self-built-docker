@@ -47,6 +47,7 @@ jobs:
         id: check_output
         env:
           DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+          GHCR_TOKEN: ${{secrets.GHCR_PUSH_TOKEN}}
         run: |
           python -m pip install -U requests
           current_version=$(python scripts/get-dockerio-hash.py --repo caddy --tag builder)
@@ -57,6 +58,7 @@ jobs:
             echo $current_version > .state/state/caddy_amd64_linux_lastest.txt
             git config --global user.email "action@github.com"
             git config --global user.name "GitHub Action"
+            git remote set-url origin https://x-access-token:${{ secrets.GHCR_PUSH_TOKEN }}@github.com/${{ github.repository }}.git
             cd .state
             git add state/caddy_amd64_linux_lastest.txt
             git commit -m "Update Caddy version to $server_version"
