@@ -57,7 +57,8 @@ jobs:
             echo $current_version > .state/state/caddy_amd64_linux_lastest.txt
             git config --global user.email "action@github.com"
             git config --global user.name "GitHub Action"
-            git add .state/state/caddy_amd64_linux_lastest.txt
+            cd .state
+            git add state/caddy_amd64_linux_lastest.txt
             git commit -m "Update Caddy version to $server_version"
             git push origin state
           else
