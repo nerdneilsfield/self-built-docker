@@ -1,0 +1,36 @@
+name: Update for caddy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the main branch
+        uses: actions/checkout@v2
+        with:
+          ref: 'main'
+      
+      - name: Checkout the state branch
+        uses: actions/checkout@v2
+        with:
+          ref: 'state'
+          path: '.state'
+      
+      - name: Compare versions
+        run: |
+          local_version=$(cat .state/version.txt)
+          server_version=$(curl -s https://example.com/latest-version.txt)
+          if [[ "$server_version" != "$local_version" ]]; then
+            echo "Update needed: $server_version available"
+            echo "$server_version" > .state/version.txt
+            git config --global user.email "action@github.com"
+            git config --global user.name "GitHub Action"
+            git add .state/version.txt
+            git commit -m "Update version to $server_version"
+            git push
+          else
+            echo "No update needed"
