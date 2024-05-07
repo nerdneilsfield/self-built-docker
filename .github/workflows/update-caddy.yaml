@@ -2,35 +2,93 @@ name: Update for caddy
 
 on:
   push:
+    paths-ignore:
+      - "README.md"
+      - "LICENSE"
+      - ".gitignore"
     branches:
-      - main
+      - master
+  pull_request:
+    paths-ignore:
+      - "README.md"
+      - "LICENSE"
+      - ".gitignore"
+    branches:
+      - master
+  schedule:
+    - cron: "1 1 * * *"
+
+env:
+    image_name: caddy
 
 jobs:
   check-updates:
     runs-on: ubuntu-latest
+    outputs:
+      show_run_next: ${{ steps.check_output.outputs.run_next }}
     steps:
       - name: Checkout the main branch
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
-          ref: 'main'
-      
+          ref: "master"
+
       - name: Checkout the state branch
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
-          ref: 'state'
-          path: '.state'
-      
-      - name: Compare versions
+          ref: "state"
+          path: ".state"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check Updates for dockerhub
+        id: check_output
+        env:
+          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
         run: |
-          local_version=$(cat .state/version.txt)
-          server_version=$(curl -s https://example.com/latest-version.txt)
-          if [[ "$server_version" != "$local_version" ]]; then
-            echo "Update needed: $server_version available"
-            echo "$server_version" > .state/version.txt
+          current_version=$(python scripts/get-dockerio-hash.py --repo caddy --tag builder)
+          state_version=$(cat .state/state/caddy_amd64_linux_lastest.txt)
+          if [[ "$current_version" != "$state_version" ]]; then
+            echo "Update needed: $current_version available, $state_version installed"
+            echo "::set-output name=run_next::true"
+            echo $current_version > .state/state/caddy_amd64_linux_lastest.txt
             git config --global user.email "action@github.com"
             git config --global user.name "GitHub Action"
-            git add .state/version.txt
-            git commit -m "Update version to $server_version"
-            git push
+            git add .state/state/caddy_amd64_linux_lastest.txt
+            git commit -m "Update Caddy version to $server_version"
+            git push origin state
           else
-            echo "No update needed"
+            echo "No update needed: $current_version available, $state_version installed"
+            echo "::set-output name=run_next::false"
+          fi
+
+  run-build:
+    needs: check-updates
+    if: needs.check-updates.outputs.show_run_next == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner}}
+          password: ${{ secrets.GHCR_PUSH_TOKEN }}
+
+      - name: Login to Dockerhub
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{secrets.DOCKER_USERNAME}}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and Push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ env.image_name }}:latest
+            docker.io/${{ secrets.DOCKER_USERNAME }}/${{ env.image_name }}:latest
