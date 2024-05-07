@@ -48,6 +48,7 @@ jobs:
         env:
           DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
         run: |
+          python -m pip install -U requests
           current_version=$(python scripts/get-dockerio-hash.py --repo caddy --tag builder)
           state_version=$(cat .state/state/caddy_amd64_linux_lastest.txt)
           if [[ "$current_version" != "$state_version" ]]; then
