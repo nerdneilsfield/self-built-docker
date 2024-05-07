@@ -19,24 +19,27 @@ on:
     - cron: "1 1 * * *"
 
 env:
-    image_name: caddy
+  image_name: caddy
 
 jobs:
   check-updates:
     runs-on: ubuntu-latest
     outputs:
-      show_run_next: ${{ steps.check_output.outputs.run_next }}
+      build_caddy: ${{ steps.check_output.outputs.build_caddy }}
+      caddy_version: ${{ steps.check_output.outputs.caddy_version }}
     steps:
       - name: Checkout the main branch
         uses: actions/checkout@v4
         with:
           ref: "master"
+          token: ${{ secrets.GHCR_TOKEN}}
 
       - name: Checkout the state branch
         uses: actions/checkout@v4
         with:
           ref: "state"
           path: ".state"
+          token: ${{ secrets.GHCR_TOKEN}}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -54,23 +57,17 @@ jobs:
           state_version=$(cat .state/state/caddy_amd64_linux_lastest.txt)
           if [[ "$current_version" != "$state_version" ]]; then
             echo "Update needed: $current_version available, $state_version installed"
-            echo "::set-output name=run_next::true"
             echo $current_version > .state/state/caddy_amd64_linux_lastest.txt
-            git config --global user.email "action@github.com"
-            git config --global user.name "GitHub Action"
-            git remote set-url origin https://x-access-token:${{ secrets.GHCR_PUSH_TOKEN }}@github.com/${{ github.repository }}.git
-            cd .state
-            git add state/caddy_amd64_linux_lastest.txt
-            git commit -m "Update Caddy version to $server_version"
-            git push origin state
+            echo "build_caddy=true" >> "$GITHUB_ENV"
+            echo "caddy_version=$current_version" >> "$GITHUB_ENV"
           else
             echo "No update needed: $current_version available, $state_version installed"
-            echo "::set-output name=run_next::false"
+            echo "build_caddy=false" >> "$GITHUB_ENV"
           fi
 
   run-build:
     needs: check-updates
-    if: needs.check-updates.outputs.show_run_next == 'true'
+    if: ${{ needs.check-updates.outputs.build_caddy == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Login to GitHub Container Registry
@@ -96,3 +93,11 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ env.image_name }}:latest
             docker.io/${{ secrets.DOCKER_USERNAME }}/${{ env.image_name }}:latest
+      
+      - name: Publish to state branch
+        uses: EndBug/add-and-commit@v9
+        with:
+          message: "Update Caddy version to ${{ needs.check-updates.outputs.caddy_version }}"
+          add: "state/caddy_amd64_linux_lastest.txt"
+          default_author: user_info
+          cwd: ".state"
