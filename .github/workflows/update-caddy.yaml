@@ -64,6 +64,7 @@ jobs:
             echo "No update needed: $current_version available, $state_version installed"
             echo "build_caddy=false" >> "$GITHUB_ENV"
           fi
+          echo $GITHUB_ENV
 
   run-build:
     needs: check-updates
