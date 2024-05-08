@@ -115,6 +115,7 @@ jobs:
         uses: nerdneilsfield/action-simple-telegram-notification-bot@master
         with:
             text: "Your Caddy image has no updated to update"
+            push_success: false
         env:
             BOT_URL: ${{ secrets.BOT_URL }}
             BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
