@@ -58,14 +58,14 @@ jobs:
           if [[ "$current_version" != "$state_version" ]]; then
             echo "Update needed: $current_version available, $state_version installed"
             echo $current_version > .state/state/caddy_amd64_linux_lastest.txt
-            echo "build_caddy=true" >> "$GITHUB_ENV"
-            echo "caddy_version=$current_version" >> "$GITHUB_ENV"
+            echo "build_caddy=true" >> "$GITHUB_OUTPUT"
+            echo "caddy_version=$current_version" >> "$GITHUB_OUTPUT"
           else
             echo "No update needed: $current_version available, $state_version installed"
-            echo "build_caddy=false" >> "$GITHUB_ENV"
+            echo "build_caddy=false" >> "$GITHUB_OUTPUT"
           fi
-          echo $GITHUB_ENV
-          cat $GITHUB_ENV
+          # echo $GITHUB_ENV
+          # cat $GITHUB_ENV
 
   run-build:
     needs: check-updates
