@@ -101,4 +101,11 @@ jobs:
           add: "state/caddy_amd64_linux_lastest.txt"
           default_author: user_info
           cwd: ".state"
+      - name: Send Notification
+        uses: nerdneilsfield/action-simple-telegram-notification-bot@master
+        with:
+            text: "Your Caddy image has been updated to ${{ steps.check_output.outputs.caddy_version }} 🎉🎉"
+        env:
+            BOT_URL: ${{ secrets.BOT_URL }}
+            BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
       
