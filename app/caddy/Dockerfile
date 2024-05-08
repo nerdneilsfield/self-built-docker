@@ -9,6 +9,6 @@ RUN xcaddy build \
     --with github.com/WeidiDeng/caddy-cloudflare-ip \
     --with github.com/hairyhenderson/caddy-teapot-module@v0.0.3-0
 
-FROM docker.io/caddy:lastest
+FROM docker.io/caddy:alpine
 
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
