@@ -2,17 +2,17 @@ name: Update for caddy
 
 on:
   push:
-    paths-ignore:
-      - "README.md"
-      - "LICENSE"
-      - ".gitignore"
+    paths:
+      - "app/caddy/**"
+      - ".github/workflows/update-caddy.yaml"
+      - "scripts/get-dockerio-hash.py"
     branches:
       - master
   pull_request:
-    paths-ignore:
-      - "README.md"
-      - "LICENSE"
-      - ".gitignore"
+    paths:
+      - "app/caddy/**"
+      - ".github/workflows/update-caddy.yaml"
+      - "scripts/get-dockerio-hash.py"
     branches:
       - master
   schedule:

@@ -8,31 +8,22 @@ import requests as rq
 GHCR_TOKEN = ""
 
 
-def get_image_hash(namespace: str, repository: str, tag: str, is_org: bool) -> str:
-    url = ""
-    if is_org:
-        url = f"https://api.github.com/orgs/{namespace}/packages/container/{repository}/versions"
-    else:
-        url = f"https://api.github.com/users/{namespace}/packages/container/{repository}/versions"
+def get_commit_hash(namespace: str, repository: str, branch: str) -> str:
+
+    url = f"https://api.github.com/repos/{namespace}/{repository}/branches/{branch}"
     headers = {
         "Authorization": f"Bearer {GHCR_TOKEN}",
         "Accept": "application/vnd.github+json",
         "X-Github-Api-Version": "2022-11-28",
     }
-        
+
     resp = rq.get(url, headers=headers)
     if resp.status_code != 200:
         raise Exception(
-            f"Failed to get image hash with code: {resp.status_code} and err: {resp.text}"
+            f"Failed to get commit hash with code: {resp.status_code} and err: {resp.text}, check the give branch whether {branch} and repo {repository} exists in the given namespace {namespace}"
         )
-        
-    for image in resp.json():
-        if tag in image["metadata"]["container"]["tags"]:
-            return image["name"]
-    raise Exception(
-        f"No image found for the given tag {tag}"
-    )
-        
+
+    return resp.json()["commit"]["sha"]
 
 
 if __name__ == "__main__":
@@ -54,13 +45,10 @@ if __name__ == "__main__":
         help="The namespace of the image",
     )
     args_parser.add_argument(
-        "--tag",
+        "--branch",
         type=str,
-        default="latest",
-        help="The tag of the image",
-    )
-    args_parser.add_argument(
-        "--org", action="store_true", help="If the image is in an organization"
+        default="main",
+        help="The branch of the image",
     )
 
     args = args_parser.parse_args()
@@ -68,7 +56,7 @@ if __name__ == "__main__":
     if os.getenv("GHCR_TOKEN") is not None:
         GHCR_TOKEN = os.getenv("GHCR_TOKEN")
     else:
-        raise Exception("GHCR_TOKEN is not set")
+        raise Exception("GHCR_TOKEN not set")
 
-    image_hash = get_image_hash(args.namespace, args.repo, args.tag, args.org)
+    image_hash = get_commit_hash(args.namespace, args.repo, args.branch)
     print(image_hash)
