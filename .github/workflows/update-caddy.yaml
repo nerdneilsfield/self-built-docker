@@ -85,6 +85,7 @@ jobs:
 
       - name: Build and Push
         uses: docker/build-push-action@v5
+        if: ${{ steps.check_output.outputs.build_caddy == 'true' }}
         with:
           context: ./app/caddy
           # file: .
@@ -102,9 +103,18 @@ jobs:
           default_author: user_info
           cwd: ".state"
       - name: Send Notification
+        if: ${{ steps.check_output.outputs.build_caddy == 'true' }}
         uses: nerdneilsfield/action-simple-telegram-notification-bot@master
         with:
             text: "Your Caddy image has been updated to ${{ steps.check_output.outputs.caddy_version }} 🎉🎉"
+        env:
+            BOT_URL: ${{ secrets.BOT_URL }}
+            BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      - name: Send Notification-no build
+        if: ${{ steps.check_output.outputs.build_caddy == 'false' }}
+        uses: nerdneilsfield/action-simple-telegram-notification-bot@master
+        with:
+            text: "Your Caddy image has no updated to update"
         env:
             BOT_URL: ${{ secrets.BOT_URL }}
             BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
