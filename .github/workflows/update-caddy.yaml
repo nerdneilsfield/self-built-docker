@@ -65,6 +65,7 @@ jobs:
             echo "build_caddy=false" >> "$GITHUB_ENV"
           fi
           echo $GITHUB_ENV
+          cat $GITHUB_ENV
 
   run-build:
     needs: check-updates
