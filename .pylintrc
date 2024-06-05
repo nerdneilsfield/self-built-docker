@@ -1,0 +1,18 @@
+[MASTER]
+init-hook='
+import sys, os
+from pathlib import Path
+
+# 获取当前目录
+current_dir = Path(__file__).parent
+
+# 查找虚拟环境目录
+venv_dirs = [d for d in current_dir.iterdir() if d.is_dir() and d.name == "env"]
+
+if venv_dirs:
+    venv_dir = venv_dirs[0]
+    # 查找 site-packages 目录
+    site_packages_dirs = list(venv_dir.glob("lib/python*/site-packages"))
+    if site_packages_dirs:
+        sys.path.append(str(site_packages_dirs[0]))
+'

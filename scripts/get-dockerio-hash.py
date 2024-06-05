@@ -28,7 +28,6 @@ def get_image_hash(
 
 
 if __name__ == "__main__":
-
     args_parser = argparse.ArgumentParser(
         description="Get the hash of a docker image from docker.io"
     )
