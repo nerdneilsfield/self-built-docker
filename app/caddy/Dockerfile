@@ -16,4 +16,7 @@ RUN upx --best --lzma /usr/bin/caddy.org -o /usr/bin/caddy
 # deploy the final binary
 FROM docker.io/caddy:alpine as prod
 LABEL maintainer="Qi Deng <dengqi935@gmail.com>"
+LABEL org.opencontainers.image.source="https://github.com/nerdneilsfield/self-built-docker"
+LABEL org.opencontainers.image.description="This is a Dockerfile for Caddy Server."
+LABEL org.opencontainers.image.licenses="MIT"
 COPY --from=upx /usr/bin/caddy /usr/bin/caddy
