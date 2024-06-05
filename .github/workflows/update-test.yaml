@@ -1,0 +1,67 @@
+name: Update for caddy
+
+on:
+  push:
+    paths:
+      - "app/caddy/**"
+      - ".github/workflows/update-caddy.yaml"
+      - "scripts/get-dockerio-hash.py"
+    branches:
+      - master
+  pull_request:
+    paths:
+      - "app/caddy/**"
+      - ".github/workflows/update-caddy.yaml"
+      - "scripts/get-dockerio-hash.py"
+    branches:
+      - master
+  schedule:
+    - cron: "1 1 * * *"
+
+env:
+  image_name: caddy
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    outputs:
+      build_caddy: ${{ steps.check_output.outputs.build_caddy }}
+      caddy_version: ${{ steps.check_output.outputs.caddy_version }}
+    steps:
+      - name: Checkout the main branch
+        uses: actions/checkout@v4
+        with:
+          ref: "master"
+          token: ${{ secrets.GHCR_TOKEN}}
+
+      - name: Checkout the state branch
+        uses: actions/checkout@v4
+        with:
+          ref: "state"
+          path: ".state"
+          token: ${{ secrets.GHCR_TOKEN}}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check Updates for dockerhub
+        id: check_output
+        env:
+          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+          GHCR_TOKEN: ${{secrets.GHCR_PUSH_TOKEN}}
+        run: |
+          "build_test=true" >> $GITHUB_ENV
+          # echo $GITHUB_ENV
+          # cat $GITHUB_ENV
+
+  build-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Test
+        if: env.build_test == "true"
+        run: echo "run"
