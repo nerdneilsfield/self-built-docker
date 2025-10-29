@@ -105,16 +105,21 @@ jobs:
             - name: Prepare /caddy directory for Pages
               if: steps.compare.outputs.same == 'false'
               run: |
+                  BUILD_TIME=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
                   mkdir -p public/caddy/downloads/${{ steps.latest.outputs.latest_tag }}
                   echo "${{ steps.latest.outputs.latest_tag }}" > public/caddy/downloads/${{ steps.latest.outputs.latest_tag }}/VERSION
                   echo "ghcr.io/${{ github.repository_owner }}/caddy:${{ steps.latest.outputs.latest_tag }}" > public/caddy/downloads/${{ steps.latest.outputs.latest_tag }}/IMAGE
+                  echo "${BUILD_TIME}" > public/caddy/downloads/${{ steps.latest.outputs.latest_tag }}/BUILD_TIME
 
                   # 生成该版本页
                   cat > public/caddy/downloads/${{ steps.latest.outputs.latest_tag }}/index.html <<EOF
-                  <html><body style="font-family:sans-serif">
+                  <html><body style="font-family:sans-serif;max-width:720px;margin:2em auto;">
                   <h2>Caddy Build: ${{ steps.latest.outputs.latest_tag }}</h2>
-                  <p>Docker Image: <code>ghcr.io/${{ github.repository_owner }}/caddy:${{ steps.latest.outputs.latest_tag }}</code></p>
+                  <p><b>Docker Image:</b> <code>ghcr.io/${{ github.repository_owner }}/caddy:${{ steps.latest.outputs.latest_tag }}</code></p>
+                  <p><b>Build Time:</b> ${BUILD_TIME}</p>
                   <p><a href="../latest/">Latest Build →</a></p>
+                  <hr>
+                  <p style="color:gray;font-size:0.85em;">Built at ${BUILD_TIME}</p>
                   </body></html>
                   EOF
 
@@ -129,9 +134,10 @@ jobs:
                   <h1>🦄 Caddy Auto Build Dashboard</h1>
                   <p><b>Latest version:</b> ${{ steps.latest.outputs.latest_tag }}</p>
                   <p><b>Docker image:</b> <code>ghcr.io/${{ github.repository_owner }}/caddy:latest</code></p>
+                  <p><b>Build time:</b> ${BUILD_TIME}</p>
                   <p><a href="./downloads/latest/">Browse latest build files</a></p>
                   <hr>
-                  <p style="color:gray;font-size:0.9em;">Updated at $(date -u +'%Y-%m-%d %H:%M UTC')</p>
+                  <p style="color:gray;font-size:0.85em;">Last updated: ${BUILD_TIME}</p>
                   </body></html>
                   EOF
 
