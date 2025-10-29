@@ -1,130 +1,161 @@
-name: Update for caddy
+name: Update for caddy (cache-based)
 
 on:
-  push:
-    paths:
-      - "app/caddy/**"
-      - ".github/workflows/update-caddy.yaml"
-      - "scripts/get-dockerio-hash.py"
-    branches:
-      - master
-  pull_request:
-    paths:
-      - "app/caddy/**"
-      - ".github/workflows/update-caddy.yaml"
-      - "scripts/get-dockerio-hash.py"
-    branches:
-      - master
-  schedule:
-    - cron: "1 1 * * *"
-
-env:
-  image_name: caddy
+    schedule:
+        - cron: "5 12 * * *" # 每天 12:05 UTC 检查
+    workflow_dispatch:
+    push:
+        paths:
+            - "app/caddy/**"
+            - ".github/workflows/update-caddy.yaml"
+            - "scripts/get-dockerio-hash.py"
+        branches:
+            - master
+    pull_request:
+        paths:
+            - "app/caddy/**"
+            - ".github/workflows/update-caddy.yaml"
+            - "scripts/get-dockerio-hash.py"
+        branches:
+            - master
 
 jobs:
-  check-updates:
-    runs-on: ubuntu-latest
-    outputs:
-      build_caddy: ${{ steps.check_output.outputs.build_caddy }}
-      caddy_version: ${{ steps.check_output.outputs.caddy_version }}
-    steps:
-      - name: Checkout the main branch
-        uses: actions/checkout@v4
-        with:
-          ref: "master"
-          token: ${{ secrets.GHCR_TOKEN}}
+    update-caddy:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            packages: write
 
-      - name: Checkout the state branch
-        uses: actions/checkout@v4
-        with:
-          ref: "state"
-          path: ".state"
-          token: ${{ secrets.GHCR_TOKEN}}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  ref: master
+                  fetch-depth: 0
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.12"
 
-      - name: Check Updates for dockerhub
-        id: check_output
-        env:
-          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
-          GHCR_TOKEN: ${{secrets.GHCR_PUSH_TOKEN}}
-        run: |
-          python -m pip install -U requests
-          current_version=$(python scripts/get-dockerio-hash.py --repo caddy --tag builder)
-          state_version=$(cat .state/state/caddy_amd64_linux_lastest.txt)
-          if [[ "$current_version" != "$state_version" ]]; then
-            echo "Update needed: $current_version available, $state_version installed"
-            echo $current_version > .state/state/caddy_amd64_linux_lastest.txt
-            echo "build_caddy=true" >> "$GITHUB_OUTPUT"
-            echo "caddy_version=$current_version" >> "$GITHUB_OUTPUT"
-          else
-            echo "No update needed: $current_version available, $state_version installed"
-            echo "build_caddy=false" >> "$GITHUB_OUTPUT"
+            - name: Install tooling
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y jq curl
+                  python -m pip install --upgrade pip
+                  # 如果脚本需要第三方库，可在此处安装：pip install requests pyyaml
 
-          fi
-          # echo $GITHUB_ENV
-          # cat $GITHUB_ENV
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        if: ${{ steps.check_output.outputs.build_caddy == 'true' }}
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner}}
-          password: ${{ secrets.GHCR_PUSH_TOKEN }}
+            - name: Prepare cache dir
+              run: mkdir -p .cache/caddy
 
-      - name: Login to Dockerhub
-        uses: docker/login-action@v3
-        if: ${{ steps.check_output.outputs.build_caddy == 'true' }}
-        with:
-          registry: docker.io
-          username: ${{secrets.DOCKER_USERNAME}}
-          password: ${{ secrets.DOCKER_TOKEN }}
+            - name: Restore version state (actions/cache)
+              id: restore-cache
+              uses: actions/cache@v4
+              with:
+                  path: .cache/caddy
+                  key: caddy-state-v1
 
-      - name: Build and Push
-        uses: docker/build-push-action@v5
-        if: ${{ steps.check_output.outputs.build_caddy == 'true' }}
-        with:
-          context: ./app/caddy
-          # file: .
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ env.image_name }}:latest
-            docker.io/${{ secrets.DOCKER_USERNAME }}/${{ env.image_name }}:latest
+            - name: Detect latest upstream caddy tag
+              id: latest
+              run: |
+                  # 方式 A：用 GitHub API 取 caddyserver/caddy 最新 release tag
+                  TAG=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | jq -r .tag_name)
+                  # 方式 B：如果你想追踪 docker.io 镜像 digest，可换成自有脚本：
+                  # TAG=$(python scripts/get-dockerio-hash.py --repo library/caddy --tag latest)
+                  echo "latest_tag=${TAG}" >> $GITHUB_OUTPUT
 
-      - name: Send Error Notification
-        if: ${{ steps.check_output.outputs.build_caddy == 'true' }} && failure()
-        uses: nerdneilsfield/action-simple-telegram-notification-bot@master
-        with:
-          text: "Your Caddy image updating to ${{ steps.check_output.outputs.caddy_version }} has error."
-        env:
-          BOT_URL: ${{ secrets.BOT_URL }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+            - name: Load last built tag from cache
+              id: previous
+              run: |
+                  if [ -f .cache/caddy/version ]; then
+                    LAST=$(cat .cache/caddy/version)
+                  else
+                    LAST="none"
+                  fi
+                  echo "last_tag=${LAST}" >> $GITHUB_OUTPUT
 
-      - name: Publish to state branch
-        uses: EndBug/add-and-commit@v9
-        if: ${{ steps.check_output.outputs.build_caddy == 'true' }}
-        with:
-          message: "Update Caddy version to ${{  steps.check_output.outputs.caddy_version }}"
-          add: "state/caddy_amd64_linux_lastest.txt"
-          default_author: user_info
-          cwd: ".state"
-      - name: Send Notification
-        if: ${{ steps.check_output.outputs.build_caddy == 'true' }}
-        uses: nerdneilsfield/action-simple-telegram-notification-bot@master
-        with:
-          text: "Your Caddy image has been updated to ${{ steps.check_output.outputs.caddy_version }} 🎉🎉"
-        env:
-          BOT_URL: ${{ secrets.BOT_URL }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-      - name: Send Notification-no build
-        if: ${{ steps.check_output.outputs.build_caddy == 'false' }}
-        uses: nerdneilsfield/action-simple-telegram-notification-bot@master
-        with:
-          text: "Your Caddy image has no updated to update"
-          push_success: false
-        env:
-          BOT_URL: ${{ secrets.BOT_URL }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+            - name: Compare tags
+              id: compare
+              run: |
+                  if [ "${{ steps.latest.outputs.latest_tag }}" = "${{ steps.previous.outputs.last_tag }}" ]; then
+                    echo "same=true" >> $GITHUB_OUTPUT
+                  else
+                    echo "same=false" >> $GITHUB_OUTPUT
+                  fi
+
+            - name: Early exit if up-to-date
+              if: steps.compare.outputs.same == 'true'
+              run: |
+                  echo "No change: caddy ${{ steps.latest.outputs.latest_tag }} is already built."
+                  echo "::notice title=Skip::Caddy is up to date."
+
+            # ====== 仅在有新版本时执行以下步骤 ======
+            - name: Set up QEMU
+              if: steps.compare.outputs.same == 'false'
+              uses: docker/setup-qemu-action@v3
+
+            - name: Set up Docker Buildx
+              if: steps.compare.outputs.same == 'false'
+              uses: docker/setup-buildx-action@v3
+
+            - name: Login to GHCR
+              if: steps.compare.outputs.same == 'false'
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.repository_owner }}
+                  password: ${{ secrets.GHCR_TOKEN }}
+
+            - name: Build and push Caddy image (multi-arch)
+              if: steps.compare.outputs.same == 'false'
+              uses: docker/build-push-action@v6
+              with:
+                  context: ./app/caddy
+                  file: ./app/caddy/Dockerfile
+                  push: true
+                  platforms: linux/amd64,linux/arm64
+                  build-args: |
+                      CADDY_UPSTREAM_TAG=${{ steps.latest.outputs.latest_tag }}
+                  tags: |
+                      ghcr.io/${{ github.repository_owner }}/caddy:${{ steps.latest.outputs.latest_tag }}
+                      ghcr.io/${{ github.repository_owner }}/caddy:latest
+                  provenance: false
+
+            - name: Update cached version state
+              if: steps.compare.outputs.same == 'false'
+              run: echo "${{ steps.latest.outputs.latest_tag }}" > .cache/caddy/version
+
+            # 友情提示：actions/cache 的保存发生在作业结束时自动进行，无需显式 save 步骤
+
+            # ===== 可选：发布 Release / 发送通知 =====
+            - name: Create GitHub Release
+              if: steps.compare.outputs.same == 'false'
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: caddy-${{ steps.latest.outputs.latest_tag }}
+                  name: Caddy build ${{ steps.latest.outputs.latest_tag }}
+                  body: |
+                      Automated build for caddy ${{ steps.latest.outputs.latest_tag }}.
+                      - Multi-arch images pushed to GHCR.
+                      - This workflow uses actions/cache for state (no state branch).
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Send Notification - updated
+              if: steps.compare.outputs.same == 'false'
+              uses: nerdneilsfield/action-simple-telegram-notification-bot@master
+              with:
+                  text: "✅ Caddy updated to ${{ steps.latest.outputs.latest_tag }} 🎉"
+              env:
+                  BOT_URL: ${{ secrets.BOT_URL }}
+                  BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+
+            - name: Send Notification - no update
+              if: steps.compare.outputs.same == 'true'
+              uses: nerdneilsfield/action-simple-telegram-notification-bot@master
+              with:
+                  text: "ℹ️ Caddy has no updates. Latest: ${{ steps.latest.outputs.latest_tag }}"
+                  push_success: false
+              env:
+                  BOT_URL: ${{ secrets.BOT_URL }}
+                  BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
