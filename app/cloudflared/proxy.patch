@@ -1,0 +1,44 @@
+edgediscovery/dial.go --- 1/2 --- Go
+ 7  7         "time" 8  8  9  9         "github.com/pkg/errors" . 10         "golang.org/x/net/proxy"10 11 )11 12 12 13 // DialEdge makes a TLS connection to a Cloudflare edge node
+edgediscovery/dial.go --- 2/2 --- Go
+18         localIP net.IP, 19         localIP net.IP,
+19 ) (net.Conn, error) { 20 ) (net.Conn, error) {
+20         // Inherit from parent context so we can cancel 21         // Inherit from parent context so we can cancel 
+..  (Ctrl-C) while dialing .. (Ctrl-C) while dialing
+21         dialCtx, dialCancel := context.WithTimeout(ctx, .. 
+..  timeout) .. 
+22         defer dialCancel() .. 
+23                                                         22 
+24         dialer := net.Dialer{} 23         dialer := net.Dialer{}
+25         if localIP != nil { 24         if localIP != nil {
+26                 dialer.LocalAddr = &net.TCPAddr{IP: loc 25                 dialer.LocalAddr = &net.TCPAddr{IP: loca
+.. alIP, Port: 0} .. lIP, Port: 0}
+27         } 26         }
+..                                                         27 
+..                                                         28         proxyDialer := proxy.FromEnvironmentUsing(&diale
+..                                                         .. r)
+..                                                         29 
+..                                                         30         var edgeConn net.Conn
+..                                                         31         var err error
+..                                                         32 
+..                                                         33         ctxDialer, ok := proxyDialer.(interface {
+..                                                         34                 DialContext(context.Context, string, str
+..                                                         .. ing) (net.Conn, error)
+..                                                         35         })
+..                                                         36         if ok {
+..                                                         37                 // Inherit from parent context so we can
+..                                                         ..  cancel (Ctrl-C) while dialing
+..                                                         38                 dialCtx, dialCancel := context.WithTimeo
+..                                                         .. ut(ctx, timeout)
+..                                                         39                 defer dialCancel()
+28         edgeConn, err := dialer.DialContext(dialCtx, "t 40                 edgeConn, err = ctxDialer.DialContext(di
+.. cp", edgeTCPAddr.String()) .. alCtx, "tcp", edgeTCPAddr.String())
+..                                                         41         } else {
+..                                                         42                 edgeConn, err = proxyDialer.Dial("tcp", 
+..                                                         .. edgeTCPAddr.String())
+..                                                         43         }
+29         if err != nil { 44         if err != nil {
+30                 return nil, newDialError(err, "DialCont 45                 return nil, newDialError(err, "DialConte
+.. ext error") .. xt error")
+31         } 46         }
+

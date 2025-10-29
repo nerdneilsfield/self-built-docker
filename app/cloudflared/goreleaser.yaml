@@ -1,0 +1,107 @@
+# goreleaser for cloudflared (patched builds) + .deb packaging
+project_name: cloudflared
+version: 2
+
+env:
+    - CGO_ENABLED=0
+    - GOFLAGS=-mod=vendor
+
+before:
+    hooks:
+        - "test -d vendor || go mod vendor"
+
+builds:
+    - id: cloudflared
+      main: ./cmd/cloudflared
+      binary: cloudflared
+      flags: [-trimpath]
+      ldflags:
+          - -s -w
+          - -X main.Version={{- with index .Env "VERSION" -}}{{ . }}{{- else -}}{{ .Tag }}{{- end }}
+          - -X 'main.BuildTime={{- with index .Env "BUILD_TIME" -}}{{ . }}{{- else -}}{{ time "2006-01-02-1504 MST" }}{{- end }}'
+          # 可选注入：
+          # - -X github.com/cloudflare/cloudflared/cmd/cloudflared/updater.BuiltForPackageManager={{ .Env.PACKAGE_MANAGER }}
+          # - -X github.com/cloudflare/cloudflared/metrics.Runtime={{ .Env.METRICS_RUNTIME }}
+      goos: [linux, darwin]
+      goarch: [amd64, arm64]
+    - id: cloudflared_windows
+      main: ./cmd/cloudflared
+      binary: cloudflared
+      flags: [-trimpath]
+      ldflags:
+          - -s -w
+          - -X main.Version={{- with index .Env "VERSION" -}}{{ . }}{{- else -}}{{ .Tag }}{{- end }}
+          - -X 'main.BuildTime={{- with index .Env "BUILD_TIME" -}}{{ . }}{{- else -}}{{ time "2006-01-02-1504 MST" }}{{- end }}'
+      goos: [windows]
+      goarch: [amd64, arm64]
+
+archives:
+    - id: default
+      builds: [cloudflared]
+      name_template: "{{ .ProjectName }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+      formats: [tar.gz]
+      files: ["none*"]
+    - id: windows
+      builds: [cloudflared_windows]
+      name_template: "{{ .ProjectName }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+      formats: [zip]
+      files: ["none*"]
+
+checksum:
+    name_template: "SHA256SUMS.txt"
+
+nfpms:
+    # 通过 nfpm 生成 .deb（无需安装 fpm 或 dpkg-deb，GoReleaser 内置 nfpm）
+    - id: deb
+      package_name: cloudflared
+      file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Arch }}"
+      builds: [cloudflared]
+      formats: [deb]
+      homepage: https://github.com/nerdneilsfield/self-built-docker
+      maintainer: "Qi Deng <dengqi@gmail.com>"
+      description: |
+          Cloudflare Tunnel client (patched build). Securely connect services to Cloudflare without opening inbound ports. (Add socket proxy).
+      license: "Apache-2.0"
+      vendor: "Custom build"
+      section: "net"
+      priority: "optional"
+      # 建议安装路径：/usr/local/bin
+      bindir: /usr/local/bin
+      dependencies: []
+      recommends: []
+      suggests: []
+      conflicts: []
+      replaces: []
+      provides: [cloudflared]
+      # 若未来需要随包安装配置文件与 systemd unit，可添加 contents：
+      # contents:
+      #   - src: packaging/cloudflared.service
+      #     dst: /lib/systemd/system/cloudflared.service
+      #     type: config|etc
+      #     file_info:
+      #       mode: 0644
+      #   - src: packaging/config.yml
+      #     dst: /etc/cloudflared/config.yml
+      #     type: config|etc
+      #     file_info:
+      #       mode: 0644
+      # postinstall: packaging/postinst
+      # preremove: packaging/prerm
+      # postremove: packaging/postrm
+
+# release:
+#     # tag: "cloudflared-{{ .Tag }}"
+#     name_template: "Cloudflared patched build {{ .Tag }}"
+#     draft: false
+#     prerelease: false
+#     mode: replace
+
+changelog:
+    use: git
+    sort: asc
+    filters:
+        exclude:
+            - "^docs:"
+            - "^chore:"
+            - "^test:"
+            - "README"
