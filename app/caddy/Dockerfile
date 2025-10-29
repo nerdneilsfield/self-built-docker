@@ -1,4 +1,4 @@
-# build caddy with plugins
+# ========= Build Caddy with Plugins =========
 FROM docker.io/caddy:builder-alpine AS builder
 RUN xcaddy build \
     --with github.com/caddyserver/nginx-adapter \
@@ -8,15 +8,18 @@ RUN xcaddy build \
     --with github.com/WeidiDeng/caddy-cloudflare-ip \
     --with github.com/hairyhenderson/caddy-teapot-module@v0.0.3-0
 
-# use upx to compress the binary
-FROM gruebel/upx:latest as upx
+# ========= Compress with UPX =========
+FROM gruebel/upx:latest AS UPX
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy.org
-RUN upx --best --lzma /usr/bin/caddy.org -o /usr/bin/caddy
+RUN upx --best --lzma /usr/bin/caddy.org -o /usr/bin/caddy && \
+    chmod +x /usr/bin/caddy
 
-# deploy the final binary
-FROM docker.io/caddy:alpine as prod
+# ========= Final Stage =========
+FROM docker.io/caddy:alpine AS prod
 LABEL maintainer="Qi Deng <dengqi935@gmail.com>"
 LABEL org.opencontainers.image.source="https://github.com/nerdneilsfield/self-built-docker"
-LABEL org.opencontainers.image.description="This is a Dockerfile for Caddy Server."
+LABEL org.opencontainers.image.description="Caddy Server with custom plugins (nginx-adapter, filter, geoip2, replace-response, cloudflare-ip, teapot)"
 LABEL org.opencontainers.image.licenses="MIT"
-COPY --from=upx /usr/bin/caddy /usr/bin/caddy
+
+COPY --from=UPX /usr/bin/caddy /usr/bin/caddy
+ENTRYPOINT ["/usr/bin/caddy"]

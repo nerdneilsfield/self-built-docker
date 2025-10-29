@@ -4,27 +4,15 @@ on:
     schedule:
         - cron: "5 12 * * *" # 每天 12:05 UTC 检查
     workflow_dispatch:
-    push:
-        paths:
-            - "app/caddy/**"
-            - ".github/workflows/update-caddy.yaml"
-            - "scripts/get-dockerio-hash.py"
-        branches:
-            - master
-    pull_request:
-        paths:
-            - "app/caddy/**"
-            - ".github/workflows/update-caddy.yaml"
-            - "scripts/get-dockerio-hash.py"
-        branches:
-            - master
 
 jobs:
     update-caddy:
         runs-on: ubuntu-latest
         permissions:
-            contents: read
+            contents: write
             packages: write
+            pages: write
+            id-token: write
 
         steps:
             - name: Checkout repository
@@ -33,17 +21,10 @@ jobs:
                   ref: master
                   fetch-depth: 0
 
-            - name: Setup Python
-              uses: actions/setup-python@v5
-              with:
-                  python-version: "3.12"
-
-            - name: Install tooling
+            - name: Install dependencies
               run: |
-                  sudo apt-get update
+                  sudo apt-get update -y
                   sudo apt-get install -y jq curl
-                  python -m pip install --upgrade pip
-                  # 如果脚本需要第三方库，可在此处安装：pip install requests pyyaml
 
             - name: Prepare cache dir
               run: mkdir -p .cache/caddy
@@ -58,10 +39,7 @@ jobs:
             - name: Detect latest upstream caddy tag
               id: latest
               run: |
-                  # 方式 A：用 GitHub API 取 caddyserver/caddy 最新 release tag
                   TAG=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | jq -r .tag_name)
-                  # 方式 B：如果你想追踪 docker.io 镜像 digest，可换成自有脚本：
-                  # TAG=$(python scripts/get-dockerio-hash.py --repo library/caddy --tag latest)
                   echo "latest_tag=${TAG}" >> $GITHUB_OUTPUT
 
             - name: Load last built tag from cache
@@ -85,9 +63,7 @@ jobs:
 
             - name: Early exit if up-to-date
               if: steps.compare.outputs.same == 'true'
-              run: |
-                  echo "No change: caddy ${{ steps.latest.outputs.latest_tag }} is already built."
-                  echo "::notice title=Skip::Caddy is up to date."
+              run: echo "::notice title=Skip::Caddy is up to date."
 
             # ====== 仅在有新版本时执行以下步骤 ======
             - name: Set up QEMU
@@ -104,7 +80,7 @@ jobs:
               with:
                   registry: ghcr.io
                   username: ${{ github.repository_owner }}
-                  password: ${{ secrets.GHCR_TOKEN }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Build and push Caddy image (multi-arch)
               if: steps.compare.outputs.same == 'false'
@@ -121,27 +97,56 @@ jobs:
                       ghcr.io/${{ github.repository_owner }}/caddy:latest
                   provenance: false
 
-            - name: Update cached version state
+            - name: Update cached version
               if: steps.compare.outputs.same == 'false'
               run: echo "${{ steps.latest.outputs.latest_tag }}" > .cache/caddy/version
 
-            # 友情提示：actions/cache 的保存发生在作业结束时自动进行，无需显式 save 步骤
-
-            # ===== 可选：发布 Release / 发送通知 =====
-            - name: Create GitHub Release
+            # ====== 发布到 GitHub Pages 的 /caddy 子目录 ======
+            - name: Prepare /caddy directory for Pages
               if: steps.compare.outputs.same == 'false'
-              uses: softprops/action-gh-release@v2
-              with:
-                  tag_name: caddy-${{ steps.latest.outputs.latest_tag }}
-                  name: Caddy build ${{ steps.latest.outputs.latest_tag }}
-                  body: |
-                      Automated build for caddy ${{ steps.latest.outputs.latest_tag }}.
-                      - Multi-arch images pushed to GHCR.
-                      - This workflow uses actions/cache for state (no state branch).
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  mkdir -p public/caddy/downloads/${{ steps.latest.outputs.latest_tag }}
+                  echo "${{ steps.latest.outputs.latest_tag }}" > public/caddy/downloads/${{ steps.latest.outputs.latest_tag }}/VERSION
+                  echo "ghcr.io/${{ github.repository_owner }}/caddy:${{ steps.latest.outputs.latest_tag }}" > public/caddy/downloads/${{ steps.latest.outputs.latest_tag }}/IMAGE
 
-            - name: Send Notification - updated
+                  # 生成该版本页
+                  cat > public/caddy/downloads/${{ steps.latest.outputs.latest_tag }}/index.html <<EOF
+                  <html><body style="font-family:sans-serif">
+                  <h2>Caddy Build: ${{ steps.latest.outputs.latest_tag }}</h2>
+                  <p>Docker Image: <code>ghcr.io/${{ github.repository_owner }}/caddy:${{ steps.latest.outputs.latest_tag }}</code></p>
+                  <p><a href="../latest/">Latest Build →</a></p>
+                  </body></html>
+                  EOF
+
+                  # 同步 latest
+                  rm -rf public/caddy/downloads/latest || true
+                  mkdir -p public/caddy/downloads/latest
+                  cp -r public/caddy/downloads/${{ steps.latest.outputs.latest_tag }}/* public/caddy/downloads/latest/
+
+                  # 生成顶层 /caddy/index.html
+                  cat > public/caddy/index.html <<EOF
+                  <html><body style="font-family:sans-serif;max-width:720px;margin:2em auto;">
+                  <h1>🦄 Caddy Auto Build Dashboard</h1>
+                  <p><b>Latest version:</b> ${{ steps.latest.outputs.latest_tag }}</p>
+                  <p><b>Docker image:</b> <code>ghcr.io/${{ github.repository_owner }}/caddy:latest</code></p>
+                  <p><a href="./downloads/latest/">Browse latest build files</a></p>
+                  <hr>
+                  <p style="color:gray;font-size:0.9em;">Updated at $(date -u +'%Y-%m-%d %H:%M UTC')</p>
+                  </body></html>
+                  EOF
+
+            - name: Upload artifact for Pages
+              if: steps.compare.outputs.same == 'false'
+              uses: actions/upload-pages-artifact@v3
+              with:
+                  path: public
+
+            - name: Deploy to GitHub Pages
+              if: steps.compare.outputs.same == 'false'
+              uses: actions/deploy-pages@v4
+
+            # ====== Telegram 通知 ======
+            - name: Telegram Notification - updated
               if: steps.compare.outputs.same == 'false'
               uses: nerdneilsfield/action-simple-telegram-notification-bot@master
               with:
@@ -150,7 +155,7 @@ jobs:
                   BOT_URL: ${{ secrets.BOT_URL }}
                   BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
 
-            - name: Send Notification - no update
+            - name: Telegram Notification - no update
               if: steps.compare.outputs.same == 'true'
               uses: nerdneilsfield/action-simple-telegram-notification-bot@master
               with:
