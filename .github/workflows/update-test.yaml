@@ -1,5 +1,4 @@
-# name: Update for caddy
-
+name: Update for test
 # on:
 #   push:
 #     paths:
@@ -20,6 +19,24 @@
 
 # env:
 #   image_name: caddy
+on:
+    schedule:
+        - cron: "5 12 * * *" # 每天 12:05 UTC 检查
+    workflow_dispatch:
+
+jobs:
+    update-caddy:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            packages: write
+            pages: write
+            id-token: write
+
+        steps:
+            - name: Checkout repository
+              run: |
+                  echo "Hello world!"
 
 # jobs:
 #   check-updates:

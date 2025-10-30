@@ -101,6 +101,13 @@ jobs:
               if: steps.compare.outputs.same == 'false'
               run: echo "${{ steps.latest.outputs.latest_tag }}" > .cache/caddy/version
 
+            - name: Save updated cache
+              if: steps.compare.outputs.same == 'false' && steps.restore_state.outputs.cache-hit != 'true'
+              uses: actions/cache/save@v4
+              with:
+                  path: .cache/caddy
+                  key: caddy-state-v1-${{ steps.latest.outputs.latest_tag }}
+
             # ====== 发布到 GitHub Pages 的 /caddy 子目录 ======
             - name: Prepare /caddy directory for Pages
               if: steps.compare.outputs.same == 'false'
