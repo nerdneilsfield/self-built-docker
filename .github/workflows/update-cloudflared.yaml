@@ -186,7 +186,7 @@ jobs:
               uses: docker/build-push-action@v6
               with:
                   context: ./cloudflared
-                  file: ./Dockerfile.amd64
+                  file: ./cloudflared/Dockerfile.amd64
                   push: true
                   platforms: linux/amd64
                   tags: |
@@ -199,7 +199,7 @@ jobs:
               uses: docker/build-push-action@v6
               with:
                   context: ./cloudflared
-                  file: ./Dockerfile.arm64
+                  file: ./cloudflared/Dockerfile.arm64
                   push: true
                   platforms: linux/arm64
                   tags: |
