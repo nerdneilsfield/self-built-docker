@@ -77,8 +77,8 @@ jobs:
               if: steps.compare.outputs.same == 'false'
               run: |
                   cd cloudflared
-                  if [ -f ../app/cloudflared/proxy.patch ]; then
-                    git apply ../app/cloudflared/proxy.patch
+                  if [ -f ../app/cloudflared/dial.go ]; then
+                    cp ../app/cloudflared/dial.go edgediscovery/dial.go
                   else
                     echo "::warning::no patch file found; continue unpatched"
                   fi
