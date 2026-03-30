@@ -4,6 +4,7 @@ RUN xcaddy build \
     --with github.com/caddyserver/nginx-adapter \
     --with github.com/sjtug/caddy2-filter \
     --with github.com/zhangjiayin/caddy-geoip2 \
+    --with github.com/mholt/caddy-webdav \
     --with github.com/caddyserver/replace-response \
     --with github.com/WeidiDeng/caddy-cloudflare-ip \
     --with github.com/hairyhenderson/caddy-teapot-module@v0.0.3-0
